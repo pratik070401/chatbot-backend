@@ -1,46 +1,35 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const { OpenAI } = require("openai");
-
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Connect to MongoDB
-mongoose
-    .connect(process.env.MONGO_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    })
-    .then(() => console.log("Connected to MongoDB"))
-    .catch((err) => console.error("MongoDB connection error:", err));
-
-// Chat Schema
-const ChatSchema = new mongoose.Schema({
-    userMessage: String,
-    botMessage: String,
-    timestamp: { type: Date, default: Date.now },
-});
-
-const Chat = mongoose.model("Chat", ChatSchema);
-
-// Chat Endpoint
 app.post("/chat", async (req, res) => {
-    const { message } = req.body;
+    const { message, botType } = req.body;
+
+    // Define system messages for different chatbots
+    const botPersonalities = {
+        "Sales Bot": "You are a helpful sales assistant who suggests products.",
+        "Support Bot":
+            "You are a customer support agent, helping with common issues.",
+        "HR Bot": "You are an HR assistant helping employees with HR policies.",
+        "Finance Bot":
+            "You are a finance assistant providing financial guidance.",
+        "E-commerce Bot":
+            "You help customers track their orders and suggest products.",
+        "Healthcare Bot": "You provide basic health advice and tips.",
+        "Education Bot": "You are a tutor helping students with their studies.",
+    };
+
+    const systemMessage =
+        botPersonalities[botType] || "You are a helpful assistant.";
 
     try {
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: message }],
+            messages: [
+                { role: "system", content: systemMessage },
+                { role: "user", content: message },
+            ],
         });
 
         const botReply = response.choices[0].message.content;
 
-        // Save chat to MongoDB
+        // Save chat history in MongoDB
         const chat = new Chat({ userMessage: message, botMessage: botReply });
         await chat.save();
 
@@ -52,7 +41,3 @@ app.post("/chat", async (req, res) => {
         });
     }
 });
-
-// Start Server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
